@@ -61,8 +61,8 @@ tokio = { version = "1", features = [
     "io-util",
     "time",
 ] }
-libcosmic = { git = "https://github.com/pop-os/libcosmic", default-features = false }
-iced_tiny_skia = { git = "https://github.com/pop-os/libcosmic/" }
+libcosmic = { git = "https://github.com/VaZark/libcosmic", branch = "quick-settings-model", default-features = false }
+iced_tiny_skia = { git = "https://github.com/VaZark/libcosmic/", branch = "quick-settings-model" }
 tiny-skia = "0.11"
 ron = "0.12"
 rand = "0.10"
