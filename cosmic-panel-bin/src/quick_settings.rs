@@ -7,6 +7,8 @@
 //! their state and are identified alongside each model so user actions can be
 //! routed back to the process that owns the control.
 
+use std::os::fd::OwnedFd;
+use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
 
 use cosmic::app::quick_settings::{
@@ -18,6 +20,20 @@ use cosmic::iced::widget::{row, slider};
 use cosmic::widget::{button, column, container, dropdown, grid, icon, text, toggler};
 
 use crate::iced::{Element, IcedProgram};
+
+/// Environment variable containing the inherited Quick Settings capability FD.
+pub const QUICK_SETTINGS_FD_ENV: &str = "COSMIC_QUICK_SETTINGS";
+
+/// Create the private capability channel used between cosmic-panel and one applet.
+///
+/// The host endpoint stays in cosmic-panel. The child endpoint is inherited by the applet
+/// process and later consumed by libcosmic's transport layer.
+pub fn quick_settings_channel() -> std::io::Result<(UnixStream, OwnedFd)> {
+    let (host, child) = UnixStream::pair()?;
+    host.set_nonblocking(true)?;
+    child.set_nonblocking(true)?;
+    Ok((host, child.into()))
+}
 
 /// A Quick Settings model together with the applet process that owns it.
 #[derive(Debug, Clone, PartialEq)]
