@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use std::{fs, mem, panic};
 
 use crate::iced::elements::PopupMappedInternal;
+use crate::quick_settings::{QUICK_SETTINGS_FD_ENV, quick_settings_channel};
 use crate::iced::elements::target::SpaceTarget;
 use crate::space::panel_space::ClientShrinkSize;
 use crate::space_container::SpaceContainer;
@@ -551,8 +552,16 @@ impl WrapperSpace for PanelSpace {
                     trace!("child argument: {}", &arg);
                     args.push(arg);
                 }
-                let mut fds = Vec::with_capacity(2);
+                let mut fds = Vec::with_capacity(3);
                 let mut applet_env = Vec::new();
+
+                let (quick_settings_stream, quick_settings_fd) = quick_settings_channel()?;
+                applet_env.push((
+                    QUICK_SETTINGS_FD_ENV.to_string(),
+                    quick_settings_fd.as_raw_fd().to_string(),
+                ));
+                fds.push(quick_settings_fd);
+                panel_client.quick_settings_stream = Some(quick_settings_stream);
                 applet_env.push((
                     "X_MINIMIZE_APPLET".to_string(),
                     panel_client.minimize_priority.is_some().to_string(),
@@ -674,9 +683,28 @@ impl WrapperSpace for PanelSpace {
                         let applet_tx_clone = applet_tx_clone.clone();
                         let (c, client_socket) = get_client_sock(&mut display_handle);
                         let raw_client_socket = client_socket.as_raw_fd();
-                        let mut applet_env = Vec::with_capacity(1);
-                        let mut fds: Vec<OwnedFd> = Vec::with_capacity(2);
+                        let mut applet_env = Vec::with_capacity(3);
+                        let mut fds: Vec<OwnedFd> = Vec::with_capacity(3);
                         let should_restart = is_restarting && err_code.is_some();
+
+                        let quick_settings_pair = if should_restart {
+                            match quick_settings_channel() {
+                                Ok((stream, fd)) => {
+                                    applet_env.push((
+                                        QUICK_SETTINGS_FD_ENV.to_string(),
+                                        fd.as_raw_fd().to_string(),
+                                    ));
+                                    fds.push(fd);
+                                    Some(stream)
+                                },
+                                Err(err) => {
+                                    error!("Failed to recreate Quick Settings channel: {}", err);
+                                    None
+                                },
+                            }
+                        } else {
+                            None
+                        };
                         let security_context = if requests_wayland_display && should_restart {
                             security_context_manager_clone.as_ref().and_then(
                                 |security_context_manager| {
@@ -761,6 +789,7 @@ impl WrapperSpace for PanelSpace {
                             {
                                 old_client.client = Some(c);
                                 old_client.security_ctx = security_context;
+                                old_client.quick_settings_stream = quick_settings_pair;
                                 info!("Replaced the client socket");
                             } else {
                                 error!("Failed to find matching client... {}", &id_clone)
@@ -777,7 +806,22 @@ impl WrapperSpace for PanelSpace {
 
                             let mut args = args.clone();
                             if is_flatpak {
-                                args.retain(|arg| !arg.contains("WAYLAND_SOCKET"));
+                                args.retain(|arg| {
+                                    !arg.contains("WAYLAND_SOCKET")
+                                        && !arg.contains(QUICK_SETTINGS_FD_ENV)
+                                });
+                                if let Some((_, quick_settings_fd)) = applet_env
+                                    .iter()
+                                    .find(|(key, _)| key == QUICK_SETTINGS_FD_ENV)
+                                {
+                                    args.insert(
+                                        args.len().saturating_sub(2),
+                                        format!(
+                                            "--env={}={}",
+                                            QUICK_SETTINGS_FD_ENV, quick_settings_fd
+                                        ),
+                                    );
+                                }
                                 args.insert(
                                     args.len().saturating_sub(2),
                                     format!("--env=WAYLAND_SOCKET={}", raw_client_socket),
