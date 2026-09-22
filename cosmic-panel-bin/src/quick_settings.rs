@@ -11,6 +11,8 @@ use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc::Sender;
 
+use calloop;
+
 use cosmic::app::quick_settings::{
     QuickSettingControl, QuickSettingKind, QuickSettingsAction, QuickSettingsEvent,
     QuickSettingsModel,
@@ -19,7 +21,7 @@ use cosmic::iced::{Alignment, Length};
 use cosmic::iced::widget::{row, slider};
 use cosmic::widget::{button, column, container, dropdown, grid, icon, text, toggler};
 
-use crate::iced::{Element, IcedProgram};
+use crate::iced::{Element, Program};
 
 /// Environment variable containing the inherited Quick Settings capability FD.
 pub const QUICK_SETTINGS_FD_ENV: &str = "COSMIC_QUICK_SETTINGS";
@@ -74,10 +76,14 @@ pub enum Message {
     Action(RoutedQuickSettingsEvent),
 }
 
-impl IcedProgram for QuickSettingsProgram {
+impl Program for QuickSettingsProgram {
     type Message = Message;
 
-    fn update(&mut self, message: Self::Message) -> cosmic::iced::Task<Self::Message> {
+    fn update(
+        &mut self,
+        message: Self::Message,
+        _loop_handle: &calloop::LoopHandle<'static, crate::xdg_shell_wrapper::shared_state::GlobalState>,
+    ) -> cosmic::iced::Task<Self::Message> {
         match message {
             Message::Action(event) => {
                 let _ = self.event_tx.send(event);
