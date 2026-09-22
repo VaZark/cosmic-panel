@@ -118,6 +118,8 @@ pub struct PanelClient {
     pub path: Option<PathBuf>,
     pub client: Option<Client>,
     pub stream: Option<UnixStream>,
+    /// Private host endpoint for this applet's Quick Settings capability channel.
+    pub quick_settings_stream: Option<UnixStream>,
     pub security_ctx: Option<WpSecurityContextV1>,
     pub exec: Option<String>,
     pub minimize_priority: Option<u32>,
@@ -188,6 +190,7 @@ impl PanelClient {
             path,
             client: Some(client),
             stream,
+            quick_settings_stream: None,
             security_ctx: None,
             exec: None,
             minimize_priority: None,
@@ -211,6 +214,10 @@ impl PanelClient {
 impl Drop for PanelClient {
     fn drop(&mut self) {
         if let Some(stream) = self.stream.take() {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+        }
+
+        if let Some(stream) = self.quick_settings_stream.take() {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
 
