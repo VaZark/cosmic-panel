@@ -2,6 +2,7 @@ mod config_watching;
 mod iced;
 mod minimize;
 mod notifications;
+mod quick_settings;
 mod space;
 mod space_container;
 mod workspaces_dbus;
